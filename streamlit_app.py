@@ -330,6 +330,7 @@ class DocumentExtractor:
 
         # ATTIVITÀ PREVALENTE (descrizione)
         attivita_patterns = [
+            r"Attivit[aà]\s+prevalente\s*(?:[:\s]*\n+)?\s*(.+?)(?=\n\s*(?:Codice\s+ATECO|Codice\s+NACE|Attivit[aà]\s+import\s+export|Contratto\s+di\s+rete|Albi\s+ruoli|Albi\s+e\s+registri|Stato\s+attivit[aà]|Data\s+inizio\s+attivit[aà]|Addetti|Titolari|Unit[aà]\s+locali|Pratiche|Trasferimenti|Partecipazioni|$))",
             r"Attivit[aà]\s+prevalente\s+(.+?)\n\s*Codice\s+ATECO",
             r"Attivit[aà]\s+prevalente\s*\n+\s*((?:(?!Codice\s+ATECO|Codice\s+NACE|Codice\s*:\s*|Importanza:)[^\n]+\n*)+)",
             r"Attivit[aà]\s+prevalente\s+([^\n]+)",
@@ -338,7 +339,7 @@ class DocumentExtractor:
             r"(?:Oggetto\s+sociale)[:\s]*([A-Z][^\n]{20,200})",
         ]
         for pattern in attivita_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match and not data.get('Attivita_Prevalente'):
                 attivita = match.group(1).strip()
                 attivita = re.sub(r'\s+', ' ', attivita)

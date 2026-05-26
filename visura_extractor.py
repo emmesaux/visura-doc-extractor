@@ -149,13 +149,14 @@ class VisuraExtractor:
 
         # Attività prevalente
         attivita_patterns = [
+            r"Attivit[aà]\s+prevalente\s*(?:[:\s]*\n+)?\s*(.+?)(?=\n\s*(?:Codice\s+ATECO|Codice\s+NACE|Attivit[aà]\s+import\s+export|Contratto\s+di\s+rete|Albi\s+ruoli|Albi\s+e\s+registri|Stato\s+attivit[aà]|Data\s+inizio\s+attivit[aà]|Addetti|Titolari|Unit[aà]\s+locali|Pratiche|Trasferimenti|Partecipazioni|$))",
             r"Attivit[aà]\s+prevalente\s+(.+?)\n\s*Codice\s+ATECO",
             r"Attivit[aà]\s+prevalente\s*\n+\s*((?:(?!Codice\s+ATECO|Codice\s+NACE|Codice\s*:\s*|Importanza:)[^\n]+\n*)+)",
             r"Attivit[aà]\s+prevalente\s+([^\n]+)",
             r"(?:Attività prevalente|attività prevalente)[:\s]+([a-z][a-z\s]+(?:prodotti|servizi|commercio|produzione)[^\n]{,100})",
         ]
         for pattern in attivita_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match and not data.get('Attivita'):
                 attivita = match.group(1).strip()
                 attivita = re.sub(r'\s+', ' ', attivita)
