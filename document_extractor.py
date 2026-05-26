@@ -14,6 +14,7 @@ import PyPDF2
 from PIL import Image
 import pytesseract
 import os
+from aml_fields import filter_aml_raw
 
 class DocumentExtractorApp:
     def __init__(self, root):
@@ -120,6 +121,7 @@ class DocumentExtractorApp:
         try:
             text = self.extract_text_from_pdf(file_path)
             self.parse_visura_camerale(text)
+            self.data = filter_aml_raw(self.data)
             self.update_treeview()
             messagebox.showinfo("Successo", "Dati estratti dalla visura camerale!")
         except Exception as e:
@@ -139,6 +141,7 @@ class DocumentExtractorApp:
                 text = self.extract_text_from_image(file_path)
             
             self.parse_documento_identita(text)
+            self.data = filter_aml_raw(self.data)
             self.update_treeview()
             messagebox.showinfo("Successo", "Dati estratti dal documento d'identità!")
         except Exception as e:

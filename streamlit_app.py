@@ -13,6 +13,7 @@ from datetime import datetime
 import io
 import base64
 from pathlib import Path
+from aml_fields import AML_TEMPLATE_COLUMNS, filter_aml_template_row
 
 # Configurazione pagina
 st.set_page_config(
@@ -198,16 +199,16 @@ class DocumentExtractor:
 
         # SEDE LEGALE con indirizzo completo (pattern unificato come visura_extractor.py)
         # Questo pattern cattura tutto insieme: Comune, Provincia, Indirizzo, CAP
-        sede_pattern = r"(?:Sede legale|Indirizzo Sede(?:\s+legale)?)[:\s]+([A-Z][A-Z\s']+?)\s*\(([A-Z]{2})\)\s*(?:VIA|PIAZZA|CORSO|VIALE)([^\n]+?)(?:CAP\s*)?(\d{5})"
+        sede_pattern = r"(?:Sede legale|Indirizzo Sede(?:\s+legale)?)[:\s]+([A-Z][A-Z\s']+?)\s*\(([A-Z]{2})\)\s*(VIA|PIAZZA|CORSO|VIALE)\s+([^\n]+?)(?:CAP\s*)?(\d{5})"
         match = re.search(sede_pattern, text, re.IGNORECASE)
         if match:
             data['Comune'] = match.group(1).strip()
             data['Provincia'] = match.group(2)
-            indirizzo = match.group(3).strip()
+            indirizzo = f"{match.group(3).strip()} {match.group(4).strip()}"
             # Rimuovi CAP dall'indirizzo se presente
             indirizzo = re.sub(r'\s*CAP.*$', '', indirizzo)
             data['Sede_Legale'] = indirizzo
-            data['CAP'] = match.group(4)
+            data['CAP'] = match.group(5)
 
         # Pattern di fallback per sede senza formato standard
         if not data.get('Sede_Legale'):
@@ -313,22 +314,25 @@ class DocumentExtractor:
 
         # CODICE ATECO (IMPORTANTE!)
         ateco_patterns = [
-            r"(?:Codice\s+ATECO|ATECO|Cod\.\s*ATECO)[:\s]*\n?\s*(\d{2}\.\d{2}\.\d{1,2})",
-            r"(?:Attività\s+prevalente).*?(\d{2}\.\d{2}\.\d{1,2})",
-            r"ATECO[:\s]+(\d{2}\.\d{2}\.\d{1,2})",
-            r"(\d{2}\.\d{2}\.\d{1,2})",  # Pattern generico per codici
+            r"(?:Codice\s+ATECO|ATECO|Cod\.\s*ATECO)[:\s]*\n?\s*(\d{2}\.\d{2}(?:\.\d{1,2})?)",
+            r"(?:Attività\s+prevalente).*?(\d{2}\.\d{2}(?:\.\d{1,2})?)",
+            r"ATECO[:\s]+(\d{2}\.\d{2}(?:\.\d{1,2})?)",
+            r"(\d{2}\.\d{2}(?:\.\d{1,2})?)",  # Pattern generico per codici
         ]
         for pattern in ateco_patterns:
             match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match and not data.get('Codice_ATECO'):
                 ateco = match.group(1)
-                # Verifica che sia un formato valido (XX.XX.X o XX.XX.XX)
-                if re.match(r'\d{2}\.\d{2}\.\d{1,2}', ateco):
+                # Verifica che sia un formato valido (XX.XX o XX.XX.X/XX.XX.XX)
+                if re.match(r'\d{2}\.\d{2}(?:\.\d{1,2})?$', ateco):
                     data['Codice_ATECO'] = ateco
                     break
 
         # ATTIVITÀ PREVALENTE (descrizione)
         attivita_patterns = [
+            r"Attivit[aà]\s+prevalente\s+(.+?)\n\s*Codice\s+ATECO",
+            r"Attivit[aà]\s+prevalente\s*\n+\s*((?:(?!Codice\s+ATECO|Codice\s+NACE|Codice\s*:\s*|Importanza:)[^\n]+\n*)+)",
+            r"Attivit[aà]\s+prevalente\s+([^\n]+)",
             r"(?:Attività\s+prevalente)[:\s]*\n?\s*([a-z][a-z\s,]+(?:prodotti|servizi|commercio|produzione|vendita|gestione)[^\n]{0,150})",
             r"(?:ATTIVITA'?\s+PREVALENTE)[:\s]*([^\n]+)",
             r"(?:Oggetto\s+sociale)[:\s]*([A-Z][^\n]{20,200})",
@@ -338,6 +342,10 @@ class DocumentExtractor:
             if match and not data.get('Attivita_Prevalente'):
                 attivita = match.group(1).strip()
                 attivita = re.sub(r'\s+', ' ', attivita)
+                attivita = re.sub(r'\bCodice\s+ATECO\b.*$', '', attivita, flags=re.IGNORECASE).strip()
+                attivita = re.sub(r'\bCodice\s+NACE\b.*$', '', attivita, flags=re.IGNORECASE).strip()
+                attivita = re.sub(r'\(fonte\s+Agenzia\s+delle\s+Entrate\).*$', '', attivita, flags=re.IGNORECASE).strip()
+                attivita = re.sub(r'\bImportanza:\s*.*$', '', attivita, flags=re.IGNORECASE).strip()
                 if len(attivita) > 10:
                     data['Attivita_Prevalente'] = attivita[:200]  # Max 200 caratteri
                     break
@@ -346,46 +354,143 @@ class DocumentExtractor:
         # Questo è lo stesso sistema implementato in visura_extractor.py
         persone = []
 
-        # Pattern amministratore
-        amm_pattern = r"(?:Amministratore|AMMINISTRATORE)[:\s]*(?:Unico|UNICO)?[:\s]*([A-Z]+)\s+([A-Z]+?)(?:\s+(?:Rappresentante|RAPPRESENTANTE|nato|NATO|Codice|CODICE|residente|RESIDENTE)|\s*\n|$)"
-        match = re.search(amm_pattern, text)
-        if match:
-            cognome = match.group(1).strip()
-            nome = match.group(2).strip()
+        def normalize_name(value: str) -> str:
+            value = re.split(r"\n\s*(?:DOMICILIO|RESIDENZA|NATO|CODICE|RAPPRESENTANTE|QUOTA)\b", value, flags=re.IGNORECASE)[0]
+            return re.sub(r"\s+", " ", value.strip())
+
+        def is_noise_name(value: str) -> bool:
+            upper = value.upper()
+            if "DIRITTO DI PARTECIPARE" in upper:
+                return True
+            noise_tokens = {
+                "DIRITTO",
+                "DECISIONI",
+                "INDICATE",
+                "PARTECIPARE",
+                "SOPRA",
+                "IMPRESA",
+                "HA",
+                "NON",
+                "PUO",
+                "Puo'",
+                "SOCI",
+                "SOCIO",
+            }
+            tokens = upper.split()
+            if len(tokens) <= 2 and any(token in noise_tokens for token in tokens):
+                return True
+            return False
+
+        def split_full_name(full_name: str) -> tuple[str, str]:
+            parts = [p for p in full_name.split() if p]
+            # Deduplica token finali ripetuti (es. STEFANO STEFANO)
+            while len(parts) >= 2 and parts[-1] == parts[-2]:
+                parts.pop()
+            if len(parts) == 2:
+                # Caso semplice: cognome + nome
+                return parts[1], parts[0]
+            if len(parts) >= 3:
+                # Regola: ultimi due token nel nome, il resto nel cognome
+                nome = " ".join(parts[-2:])
+                cognome = " ".join(parts[:-2])
+                return nome, cognome
+            return "", ""
+
+
+        def is_company_name(value: str) -> bool:
+            upper = value.upper()
+            markers = [
+                "SRL",
+                "S.R.L",
+                "SPA",
+                "S.P.A",
+                "SAS",
+                "S.A.S",
+                "SNC",
+                "S.N.C",
+                "SOCIETA",
+                "COMPANY",
+                "LTD",
+                "PLC",
+                "LLC",
+            ]
+            return any(marker in upper for marker in markers)
+
+        def add_person(role: str, full_name: str, is_company: bool = False) -> None:
+            full_name = normalize_name(full_name)
+            if not full_name:
+                return
+            if is_noise_name(full_name):
+                return
+            if is_company:
+                cognome = full_name
+                nome = ""
+            else:
+                nome, cognome = split_full_name(full_name)
+                if not nome or not cognome:
+                    return
+            if any(p['cognome'] == cognome and p['nome'] == nome and p['carica'] == role for p in persone):
+                return
             persone.append({
-                'carica': 'AMMINISTRATORE',
+                'carica': role,
                 'cognome': cognome,
-                'nome': nome
+                'nome': nome,
+                'full_name': full_name
             })
 
+        # Pattern amministratore
+        amm_pattern = r"(?:Amministratore|AMMINISTRATORE)[:\s]*(?:Unico|UNICO)?[:\s]*([A-Z][A-Z\s\n'\.&-]+?)(?=\s+(?:Rappresentante|RAPPRESENTANTE|nato|NATO|Codice|CODICE|residente|RESIDENTE|quota|QUOTA|domicilio|DOMICILIO)\b|$)"
+        for match in re.finditer(amm_pattern, text):
+            add_person('AMMINISTRATORE', match.group(1))
+
+        # Pattern legale rappresentante
+        legale_pattern = r"(?:Legale\s+rappresentante|Rappresentante\s+legale)[:\s]*([A-Z][A-Z\s\n'\.&-]+?)(?=\s+(?:nato|NATO|Codice|CODICE|residente|RESIDENTE|quota|QUOTA|domicilio|DOMICILIO)\b|$)"
+        for match in re.finditer(legale_pattern, text, re.IGNORECASE):
+            add_person('LEGALE RAPPRESENTANTE', match.group(1))
+
         # Pattern per soci
-        soci_pattern = r"(?:Socio|SOCIO)[:\s]*([A-Z]+)\s+([A-Z]+?)(?:\s+(?:nato|NATO|Codice|CODICE|residente|RESIDENTE|quota|QUOTA)|\s*\n|$)"
+        soci_pattern = r"(?:Socio|SOCIO)[:\s]*([A-Z][A-Z\s\n'\.&-]+?)(?=\s+(?:nato|NATO|Codice|CODICE|residente|RESIDENTE|quota|QUOTA|domicilio|DOMICILIO)\b|$)"
         for match in re.finditer(soci_pattern, text):
-            cognome = match.group(1).strip()
-            nome = match.group(2).strip()
-            persone.append({
-                'carica': 'SOCIO',
-                'cognome': cognome,
-                'nome': nome
-            })
+            full_name = normalize_name(match.group(1))
+            if is_company_name(full_name):
+                add_person('SOCIO AZIENDA', full_name, is_company=True)
+            else:
+                add_person('SOCIO', full_name)
 
         # Pattern per titolari (gestisce ditte individuali)
         # Pattern 1: "Titolare di impresa individualeFUSTO VALENTINA" o "Titolare Firmataria FUSTO VALENTINA"
-        titolare_pattern1 = r"(?:Titolare|TITOLARE)(?:\s+di\s+impresa\s+individuale|\s+Firmataria)?[:\s\n]*([A-Z]+)\s+([A-Z]+?)(?:\s+(?:nato|NATO|Codice|CODICE|Registro|REGISTRO)|\s*\n|$)"
+        titolare_pattern1 = r"(?:Titolare|TITOLARE)(?:\s+di\s+impresa\s+individuale|\s+Firmataria)?[:\s\n]*([A-Z\s\n'\.&-]+?)(?=\s+(?:nato|NATO|Codice|CODICE|Registro|REGISTRO|domicilio|DOMICILIO)\b|$)"
         # Pattern 2: Standard "Titolare: NOME COGNOME"
-        titolare_pattern2 = r"(?:Titolare|TITOLARE)[:\s]*([A-Z]+)\s+([A-Z]+?)(?:\s+(?:nato|NATO|Codice|CODICE|residente|RESIDENTE)|\s*\n|$)"
+        titolare_pattern2 = r"(?:Titolare|TITOLARE)[:\s]*([A-Z\s\n'\.&-]+?)(?=\s+(?:nato|NATO|Codice|CODICE|residente|RESIDENTE|domicilio|DOMICILIO)\b|$)"
 
         for pattern in [titolare_pattern1, titolare_pattern2]:
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                cognome = match.group(1).strip()
-                nome = match.group(2).strip()
-                # Evita duplicati
-                if not any(p['cognome'] == cognome and p['nome'] == nome for p in persone):
-                    persone.append({
-                        'carica': 'TITOLARE',
-                        'cognome': cognome,
-                        'nome': nome
-                    })
+                full_name = normalize_name(match.group(1))
+                add_person('TITOLARE', full_name)
+
+        # Socio azienda in sezione pegno (multi-linea)
+        pegno_pattern = r"(?:Pegno|PEGNO)\s*\n+((?:[A-Z0-9][A-Z0-9\s'\.&-]+\n)+)"
+        for match in re.finditer(pegno_pattern, text):
+            company = normalize_name(match.group(1).replace("\n", " "))
+            if company:
+                add_person('SOCIO AZIENDA', company, is_company=True)
+
+        def extract_quota_for_person(full_text: str, cognome: str, nome: str) -> str:
+            """Estrae la quota partecipazione (percentuale o valore) per una persona."""
+            name_part = rf"{cognome}\s+{nome}" if nome else rf"{cognome}"
+            base_pattern = name_part + r"[^\n]{0,200}?(?:quota|QUOTA|partecipazione)"
+            percent_pattern = base_pattern + r"[^0-9]{0,20}(\d{1,3}(?:[\.,]\d{1,2})?)\s*%"
+            value_pattern = base_pattern + r"[^\n]{0,80}?(?:€|EUR|Euro)\s*([\d\.,]+)"
+
+            match = re.search(percent_pattern, full_text, re.IGNORECASE)
+            if match:
+                return f"{match.group(1)}%"
+
+            match = re.search(value_pattern, full_text, re.IGNORECASE)
+            if match:
+                return f"EUR {match.group(1)}"
+
+            return ""
 
         # Per ogni persona, cerca i dati personali nel testo
         for i, persona in enumerate(persone[:5], start=1):
@@ -395,6 +500,13 @@ class DocumentExtractor:
             data[f'Carica {i}'] = persona['carica']
             data[f'Cognome {i}'] = cognome
             data[f'Nome {i}'] = nome
+            data[f'Ambiguita Nome {i}'] = 'NO'
+            quota = extract_quota_for_person(text, cognome, nome)
+            if quota:
+                data[f'Quota {i}'] = quota
+
+            if not nome:
+                continue
 
             # Cerca SOLO nella sezione dettagliata che contiene Nato, CF e domicilio tutti insieme
             persona_section_pattern = rf"{cognome}\s+{nome}[^\n]*\n+Nato\s+a.*?domicilio.*?CAP\s+\d{{5}}"
@@ -418,6 +530,8 @@ class DocumentExtractor:
                 if cf_persona_match:
                     cf = cf_persona_match.group(1)
                     data[f'Codfisc {i}'] = cf
+
+                    data[f'Ambiguita Nome {i}'] = 'NO'
 
                     # Estrai sesso dal CF (9° carattere: <40=M, >=40=F)
                     try:
@@ -671,52 +785,33 @@ class DocumentExtractor:
         return sum(1 for keyword in keywords if keyword in text_lower) >= 2
 
 def load_template():
-    """Carica il template Excel"""
-    template_path = Path(__file__).parent / "format_import_template.xlsx"
-    try:
-        if template_path.exists():
-            df = pd.read_excel(template_path)
-            return df.columns.tolist()
-        return None
-    except Exception as e:
-        st.error(f"Errore nel caricamento del template: {e}")
-        return None
+    """Ritorna le colonne AML per l'output"""
+    return AML_TEMPLATE_COLUMNS
 
 def map_data_to_template(visura_data, documento_data):
     """Mappa i dati estratti alle colonne del template"""
-    # Carica le colonne del template
-    template_columns = load_template()
-
-    # Se il template non esiste, usa il formato standard
-    if not template_columns:
-        # Combina i dati in formato standard
-        combined = {**visura_data, **documento_data}
-        return pd.DataFrame([combined])
-
-    # Inizializza riga con tutte le colonne a None
-    row = {col: None for col in template_columns}
+    # Usa solo le colonne AML
+    row = {col: "" for col in AML_TEMPLATE_COLUMNS}
 
     # Mappa dati della visura
     if visura_data:
-        row['Pers Soc'] = 'S' if visura_data.get('Denominazione') else 'P'
-        row['Ragionesociale'] = visura_data.get('Denominazione', '')
-        row['Intestazione'] = visura_data.get('Denominazione', '')
-        row['Natura Giuridica'] = visura_data.get('Forma_Giuridica', '')
-        row['Codfisc Azienda'] = visura_data.get('Codice_Fiscale', '')
-        row['Partita Iva Azienda'] = visura_data.get('Partita_IVA', '')
-        row['Cciaa'] = visura_data.get('Numero_REA', '')
-        row['Cod Ateco'] = visura_data.get('Codice_ATECO', '')  # AGGIUNTO
-        row['Attivita'] = visura_data.get('Attivita_Prevalente', '')  # AGGIUNTO
-        row['Indirizzo Sede'] = visura_data.get('Sede_Legale', '')
-        row['Comune Sede'] = visura_data.get('Comune', '')
-        row['Cap Sede'] = visura_data.get('CAP', '')
-        row['Prov Sede'] = visura_data.get('Provincia', '')
-        row['Stato Sede'] = 'ITALIA'
-        row['Data Ini Rapporto'] = visura_data.get('Data_Costituzione', '')
-        row['Prest Prof'] = ''  # Campo lasciato vuoto
-        row['Tipo Ident'] = 'Diretta'
-        row['Data Ident'] = datetime.now().strftime('%Y-%m-%d')
-        row['Pep'] = 'NO'
+        row['AZ_TipoSoggetto'] = 'S' if visura_data.get('Denominazione') else 'P'
+        row['AZ_RagioneSociale'] = visura_data.get('Denominazione', '')
+        row['AZ_FormaGiuridica'] = visura_data.get('Forma_Giuridica', '')
+        row['AZ_CF'] = visura_data.get('Codice_Fiscale', '')
+        row['AZ_PIVA'] = visura_data.get('Partita_IVA', '')
+        row['AZ_REA'] = visura_data.get('Numero_REA', '')
+        row['AZ_ATECO'] = visura_data.get('Codice_ATECO', '')
+        row['AZ_Attivita'] = visura_data.get('Attivita_Prevalente', '')
+        row['AZ_Sede_Indirizzo'] = visura_data.get('Sede_Legale', '')
+        row['AZ_Sede_Comune'] = visura_data.get('Comune', '')
+        row['AZ_Sede_CAP'] = visura_data.get('CAP', '')
+        row['AZ_Sede_Provincia'] = visura_data.get('Provincia', '')
+        row['AZ_Sede_Stato'] = 'ITALIA'
+        row['AZ_DataCostituzione'] = visura_data.get('Data_Costituzione', '')
+        row['ID_Tipo'] = 'Diretta'
+        row['ID_Data'] = datetime.now().strftime('%Y-%m-%d')
+        row['PEP'] = 'NO'
 
     # Mappa dati delle persone (fino a 5 persone)
     # PRIORITA': Usa i dati dalla visura se disponibili (estrazione completa),
@@ -728,76 +823,64 @@ def map_data_to_template(visura_data, documento_data):
             carica_key = f'Carica {i}'
             if carica_key in visura_data:
                 # Mappa tutti i dati personali dalla visura
-                row[f'Carica {i}'] = visura_data.get(f'Carica {i}', '')
-                row[f'Nome {i}'] = visura_data.get(f'Nome {i}', '')
-                row[f'Cognome {i}'] = visura_data.get(f'Cognome {i}', '')
-                row[f'Sesso {i}'] = visura_data.get(f'Sesso {i}', '')
-                row[f'Data Nas {i}'] = visura_data.get(f'Data Nas {i}', '')
-                row[f'Comune Nas {i}'] = visura_data.get(f'Comune Nas {i}', '')
-                row[f'Provincia Nas {i}'] = visura_data.get(f'Provincia Nas {i}', '')
-                row[f'Stato Nas {i}'] = visura_data.get(f'Stato Nas {i}', '')
-                row[f'Codfisc {i}'] = visura_data.get(f'Codfisc {i}', '')
-                row[f'Indirizzo Res {i}'] = visura_data.get(f'Indirizzo Res {i}', '')
-                row[f'Comune Res {i}'] = visura_data.get(f'Comune Res {i}', '')
-                row[f'Cap Res {i}'] = visura_data.get(f'Cap Res {i}', '')
-                row[f'Prov Res {i}'] = visura_data.get(f'Prov Res {i}', '')
-                row[f'Stato Res {i}'] = visura_data.get(f'Stato Res {i}', '')
+                row[f'P{i}_Ruolo'] = visura_data.get(f'Carica {i}', '')
+                row[f'P{i}_Nome'] = visura_data.get(f'Nome {i}', '')
+                row[f'P{i}_Cognome'] = visura_data.get(f'Cognome {i}', '')
+                row[f'P{i}_AmbiguitaNome'] = visura_data.get(f'Ambiguita Nome {i}', '')
+                row[f'P{i}_Quota'] = visura_data.get(f'Quota {i}', '')
+                row[f'P{i}_Sesso'] = visura_data.get(f'Sesso {i}', '')
+                row[f'P{i}_DataNascita'] = visura_data.get(f'Data Nas {i}', '')
+                row[f'P{i}_ComuneNascita'] = visura_data.get(f'Comune Nas {i}', '')
+                row[f'P{i}_ProvinciaNascita'] = visura_data.get(f'Provincia Nas {i}', '')
+                row[f'P{i}_StatoNascita'] = visura_data.get(f'Stato Nas {i}', '')
+                row[f'P{i}_CF'] = visura_data.get(f'Codfisc {i}', '')
+                row[f'P{i}_IndirizzoRes'] = visura_data.get(f'Indirizzo Res {i}', '')
+                row[f'P{i}_ComuneRes'] = visura_data.get(f'Comune Res {i}', '')
+                row[f'P{i}_CAPRes'] = visura_data.get(f'Cap Res {i}', '')
+                row[f'P{i}_ProvinciaRes'] = visura_data.get(f'Prov Res {i}', '')
+                row[f'P{i}_StatoRes'] = visura_data.get(f'Stato Res {i}', '')
 
     # Se c'è un documento d'identità, usa quei dati per Persona 1
     # (sovrascrive o integra i dati dalla visura)
     if documento_data:
         # Se non c'è già una carica dalla visura, imposta come TITOLARE/RAPPRESENTANTE
-        if not row.get('Carica 1'):
-            row['Carica 1'] = 'TITOLARE' if visura_data else 'RAPPRESENTANTE LEGALE'
+        if not row.get('P1_Ruolo'):
+            row['P1_Ruolo'] = 'TITOLARE' if visura_data else 'RAPPRESENTANTE LEGALE'
 
         # Mappa dati documento per Persona 1 (integra o sovrascrive)
-        if not row.get('Nome 1'):
-            row['Nome 1'] = documento_data.get('Nome', '')
-        if not row.get('Cognome 1'):
-            row['Cognome 1'] = documento_data.get('Cognome', '')
-        if not row.get('Sesso 1'):
-            row['Sesso 1'] = documento_data.get('Sesso', '')
-        if not row.get('Data Nas 1'):
-            row['Data Nas 1'] = documento_data.get('Data_Nascita', '')
-        if not row.get('Comune Nas 1'):
-            row['Comune Nas 1'] = documento_data.get('Luogo_Nascita', '')
-        if not row.get('Provincia Nas 1'):
-            row['Provincia Nas 1'] = documento_data.get('Provincia_Nascita', '')
-        if not row.get('Stato Nas 1'):
-            row['Stato Nas 1'] = 'ITALIA'
-        if not row.get('Codfisc 1'):
-            row['Codfisc 1'] = documento_data.get('CF_Persona', '')
-        if not row.get('Indirizzo Res 1'):
-            row['Indirizzo Res 1'] = documento_data.get('Residenza', '')
-        if not row.get('Comune Res 1'):
-            row['Comune Res 1'] = documento_data.get('Comune_Residenza', '')
-        if not row.get('Prov Res 1'):
-            row['Prov Res 1'] = documento_data.get('Provincia_Nascita', '')
-        if not row.get('Stato Res 1'):
-            row['Stato Res 1'] = 'ITALIA'
+        if not row.get('P1_Nome'):
+            row['P1_Nome'] = documento_data.get('Nome', '')
+        if not row.get('P1_Cognome'):
+            row['P1_Cognome'] = documento_data.get('Cognome', '')
+        if not row.get('P1_Sesso'):
+            row['P1_Sesso'] = documento_data.get('Sesso', '')
+        if not row.get('P1_DataNascita'):
+            row['P1_DataNascita'] = documento_data.get('Data_Nascita', '')
+        if not row.get('P1_ComuneNascita'):
+            row['P1_ComuneNascita'] = documento_data.get('Luogo_Nascita', '')
+        if not row.get('P1_ProvinciaNascita'):
+            row['P1_ProvinciaNascita'] = documento_data.get('Provincia_Nascita', '')
+        if not row.get('P1_StatoNascita'):
+            row['P1_StatoNascita'] = 'ITALIA'
+        if not row.get('P1_CF'):
+            row['P1_CF'] = documento_data.get('CF_Persona', '')
+        if not row.get('P1_IndirizzoRes'):
+            row['P1_IndirizzoRes'] = documento_data.get('Residenza', '')
+        if not row.get('P1_ComuneRes'):
+            row['P1_ComuneRes'] = documento_data.get('Comune_Residenza', '')
+        if not row.get('P1_ProvinciaRes'):
+            row['P1_ProvinciaRes'] = documento_data.get('Provincia_Nascita', '')
+        if not row.get('P1_StatoRes'):
+            row['P1_StatoRes'] = 'ITALIA'
 
         # Dati specifici del documento (sempre dal documento)
-        row['Tipo Doc'] = documento_data.get('Tipo_Documento', '')
-        row['Num Doc'] = documento_data.get('Numero_Documento', '')
-        row['Data Doc'] = documento_data.get('Data_Rilascio', '')
-        row['Scadenza Doc'] = documento_data.get('Data_Scadenza', '')
-        row['Autorita Doc'] = documento_data.get('Comune_Rilascio', '')
+        row['DOC_Tipo'] = documento_data.get('Tipo_Documento', '')
+        row['DOC_Numero'] = documento_data.get('Numero_Documento', '')
+        row['DOC_DataRilascio'] = documento_data.get('Data_Rilascio', '')
+        row['DOC_DataScadenza'] = documento_data.get('Data_Scadenza', '')
+        row['DOC_Autorita'] = documento_data.get('Comune_Rilascio', '')
 
-        # Copia dati anche come Titolare 1
-        row['Tit 1 Nome'] = row.get('Nome 1', '')
-        row['Tit 1 Cognome'] = row.get('Cognome 1', '')
-        row['Tit 1 Codfisc'] = row.get('Codfisc 1', '')
-        row['Tit 1 Sesso'] = row.get('Sesso 1', '')
-        row['Tit 1 Datanas'] = row.get('Data Nas 1', '')
-        row['Tit 1 Comunenas'] = row.get('Comune Nas 1', '')
-        row['Tit 1 Provincia Nas'] = row.get('Provincia Nas 1', '')
-        row['Tit 1 Stato Nas'] = row.get('Stato Nas 1', '')
-        row['Tit 1 Tipodoc'] = row.get('Tipo Doc', '')
-        row['Tit 1 Numdoc'] = row.get('Num Doc', '')
-        row['Tit 1 Rilasc Da'] = row.get('Autorita Doc', '')
-        row['Tit 1 Scad Doc'] = row.get('Scadenza Doc', '')
-
-    return pd.DataFrame([row])
+    return pd.DataFrame([filter_aml_template_row(row)])
 
 def create_download_link(df, filename, file_format):
     """Crea un link per il download del file"""
@@ -869,7 +952,7 @@ def main():
         # Info sul template
         template_exists = load_template() is not None
         if template_exists:
-            st.info("📋 Template formato import rilevato - I dati saranno esportati nel formato personalizzato")
+            st.info("📋 Output limitato ai soli campi AML")
 
         col1, col2 = st.columns(2)
 
