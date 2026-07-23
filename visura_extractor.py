@@ -11,11 +11,11 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import PyPDF2
 from PIL import Image
-import pytesseract
 from aml_fields import AML_TEMPLATE_COLUMNS, filter_aml_template_row
+from google_ocr import extract_text_from_image as google_extract_text_from_image
+from google_ocr import extract_text_from_pdf as google_extract_text_from_pdf
 
-# Se Tesseract non è nel PATH, specificare il percorso
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Per Google Vision imposta GOOGLE_APPLICATION_CREDENTIALS al JSON del service account
 
 
 class VisuraExtractor:
@@ -35,9 +35,9 @@ class VisuraExtractor:
                     if page_text:
                         text += page_text + "\n"
 
-            # Se il testo estratto è vuoto o molto breve, prova con OCR
+            # Se il testo estratto è vuoto o molto breve, prova con OCR Google
             if len(text.strip()) < 100:
-                print(f"  Testo estratto insufficiente, provo con OCR...")
+                print(f"  Testo estratto insufficiente, provo con OCR Google...")
                 text = self.extract_text_with_ocr(pdf_path)
 
             return text
@@ -46,30 +46,18 @@ class VisuraExtractor:
             return ""
 
     def extract_text_with_ocr(self, pdf_path: str) -> str:
-        """Estrae testo da PDF usando OCR"""
+        """Estrae testo da PDF usando Google Cloud Vision"""
         try:
-            from pdf2image import convert_from_path
-
-            # Converti PDF in immagini
-            images = convert_from_path(pdf_path, dpi=300)
-            text = ""
-
-            for i, image in enumerate(images):
-                # Applica OCR
-                page_text = pytesseract.image_to_string(image, lang='ita')
-                text += page_text + "\n"
-
-            return text
+            return google_extract_text_from_pdf(pdf_path)
         except Exception as e:
-            print(f"  Errore OCR: {e}")
+            print(f"  Errore OCR Google: {e}")
             return ""
 
     def extract_text_from_image(self, image_path: str) -> str:
-        """Estrae testo da un'immagine usando OCR"""
+        """Estrae testo da un'immagine usando Google Cloud Vision"""
         try:
             image = Image.open(image_path)
-            text = pytesseract.image_to_string(image, lang='ita')
-            return text
+            return google_extract_text_from_image(image)
         except Exception as e:
             print(f"  Errore nell'estrazione da immagine {image_path}: {e}")
             return ""

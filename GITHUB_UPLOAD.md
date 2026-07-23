@@ -142,6 +142,13 @@ git push
 - Il `.gitignore` è già configurato per escludere file PDF, immagini e Excel
 - Se hai documenti di test, aggiungili a `.gitignore`
 
+### Segreti e chiave Google Vision
+
+- In locale usa un file `.env` con `GOOGLE_VISION_API_KEY=...`
+- Su Streamlit Cloud usa `st.secrets` tramite `.streamlit/secrets.toml` nel deploy
+- Se usi GitHub Actions o altri workflow, salva la chiave nei **Repository secrets** di GitHub con il nome `GOOGLE_VISION_API_KEY`
+- Non committare mai il valore reale della chiave nel repository
+
 ---
 
 ## 🆘 Problemi Comuni

@@ -17,32 +17,42 @@ Sistema automatico per l'estrazione di dati da **Visure Camerali** e **Documenti
 ### Software necessario
 
 1. **Python 3.8+**
-2. **Tesseract OCR** (per il riconoscimento ottico dei caratteri)
+2. **Google Cloud Vision OCR** (per il riconoscimento ottico dei caratteri)
 
-### Installazione Tesseract OCR (Windows)
+### Configurazione Google Vision con API key (Windows)
 
-1. Scarica Tesseract da: https://github.com/UB-Mannheim/tesseract/wiki
-2. Esegui l'installer e installa in `C:\Program Files\Tesseract-OCR`
-3. Durante l'installazione, assicurati di selezionare il language pack **Italiano**
-4. Aggiungi Tesseract al PATH di sistema oppure modifica lo script
+1. Crea un progetto su Google Cloud
+2. Abilita l'API **Vision AI**
+3. Crea una chiave API per Vision
+4. Crea un file `.env` locale con:
+	```bash
+	GOOGLE_VISION_API_KEY=la_tua_chiave_api
+	```
+5. Non caricare il file `.env` su GitHub
 
-Se Tesseract non è nel PATH, modifica la riga 17 di `visura_extractor.py`:
-```python
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+### Deploy su Streamlit Cloud
+
+Se pubblichi l'app su Streamlit Cloud, inserisci la stessa chiave in `st.secrets` con un file `.streamlit/secrets.toml` sul deploy:
+
+```toml
+GOOGLE_VISION_API_KEY = "la_tua_chiave_api"
 ```
+
+Non committare il file reale: usa il modello [secrets.toml.example](.streamlit/secrets.toml.example).
 
 ### Librerie Python
 
 Installa le dipendenze con:
 ```bash
-pip install pandas openpyxl PyPDF2 pytesseract pdf2image pillow
+pip install pandas openpyxl PyPDF2 google-cloud-vision pdf2image pillow
 ```
 
 Librerie richieste:
 - pandas (manipolazione dati)
 - openpyxl (gestione Excel)
 - PyPDF2 (estrazione testo da PDF)
-- pytesseract (wrapper Python per Tesseract)
+- requests (chiamate HTTP verso Google Vision)
+- python-dotenv (caricamento del file .env)
 - pdf2image (conversione PDF in immagini)
 - pillow (gestione immagini)
 
@@ -132,11 +142,8 @@ Per un riconoscimento ottimale:
 
 ## Risoluzione Problemi
 
-### Tesseract non trovato
-```
-Error: Tesseract not found
-```
-**Soluzione**: Installa Tesseract OCR o modifica il path nello script
+### Google Vision non configurato
+**Soluzione**: crea un file `.env` con `GOOGLE_VISION_API_KEY` oppure usa `st.secrets` sul deploy
 
 ### Nessun dato estratto
 **Possibili cause**:
@@ -169,7 +176,7 @@ Modifica il metodo `create_row_from_data()` alla riga 306+
 ## Note Tecniche
 
 - L'estrazione avviene prima tentando di leggere il testo dal PDF
-- Se il testo è insufficiente, viene usato OCR
+- Se il testo è insufficiente, viene usato OCR Google Vision
 - I dati vengono validati con espressioni regolari
 - Il formato date è italiano (GG/MM/AAAA)
 - Supporto completo per caratteri accentati italiani

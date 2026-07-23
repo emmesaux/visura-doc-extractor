@@ -28,6 +28,9 @@ Thumbs.db
 *.swp
 *.swo
 *~
+.env
+.env.*
+.streamlit/secrets.toml
 
 # Folders with documents (not to be committed)
 ASERO CONSOLATO/

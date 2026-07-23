@@ -9,10 +9,12 @@
    - Scarica Python 3.11 o superiore
    - IMPORTANTE: Durante l'installazione seleziona "Add Python to PATH"
 
-2. **Scarica e installa Tesseract OCR**
-   - Vai su: https://github.com/UB-Mannheim/tesseract/wiki
-   - Scarica l'installer per Windows
-   - Durante l'installazione, seleziona "Additional language data (download)" e scegli "Italian"
+2. **Configura Google Cloud Vision**
+   - Crea un progetto su Google Cloud
+   - Abilita l'API Vision AI
+   - Crea una chiave API per Vision
+   - Crea un file `.env` locale con `GOOGLE_VISION_API_KEY=...`
+   - Se pubblichi su Streamlit Cloud, usa anche `.streamlit/secrets.toml`
 
 3. **Installa l'applicazione**
    - Estrai tutti i file in una cartella (es: C:\DocumentExtractor)
@@ -28,9 +30,9 @@
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
 
-3. **Installa Python e Tesseract**:
+3. **Installa Python e Poppler**:
    ```bash
-   brew install python tesseract tesseract-lang
+   brew install python poppler
    ```
 
 4. **Installa l'applicazione**:
@@ -44,10 +46,10 @@
 
 1. **Apri il Terminale**
 
-2. **Installa Python e Tesseract**:
+2. **Installa Python e Poppler**:
    ```bash
    sudo apt update
-   sudo apt install python3 python3-pip tesseract-ocr tesseract-ocr-ita
+   sudo apt install python3 python3-pip poppler-utils
    ```
 
 3. **Installa l'applicazione**:
@@ -155,9 +157,9 @@ ABC SRL;12345678901;12345678901;Mario;Rossi;...
 ### "Python non trovato"
 → Reinstalla Python e seleziona "Add Python to PATH"
 
-### "Tesseract not found"
-→ **Windows**: Aggiungi `C:\Program Files\Tesseract-OCR` al PATH di sistema
-→ **macOS/Linux**: Reinstalla con `brew install tesseract` o `apt install tesseract-ocr`
+### Google Vision non configurato
+→ Verifica di aver attivato Vision AI su Google Cloud
+→ Imposta `GOOGLE_VISION_API_KEY` nel `.env` oppure in `st.secrets`
 
 ### Dati non estratti correttamente
 → Verifica la qualità del PDF/immagine
@@ -192,7 +194,7 @@ pip install -r requirements.txt
 
 ### Controllare:
 1. Versione Python: `python --version` (deve essere 3.8+)
-2. Tesseract installato: `tesseract --version`
+2. Google Vision configurato: verifica `GOOGLE_VISION_API_KEY` o `st.secrets`
 3. Dipendenze installate: `pip list`
 
 ### File di Log
@@ -256,8 +258,8 @@ DocumentExtractor/
 
 - [ ] Python 3.8+ installato
 - [ ] Python aggiunto al PATH
-- [ ] Tesseract OCR installato
-- [ ] Language pack italiano installato
+- [ ] Google Cloud Vision configurato
+- [ ] File JSON credenziali disponibile
 - [ ] Dipendenze Python installate (`pip install -r requirements.txt`)
 - [ ] App avviata con successo
 - [ ] Test con documento di prova completato

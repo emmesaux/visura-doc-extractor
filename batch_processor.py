@@ -10,9 +10,10 @@ from pathlib import Path
 import pandas as pd
 import PyPDF2
 from PIL import Image
-import pytesseract
 import re
 from datetime import datetime
+from google_ocr import extract_text_from_image as google_extract_text_from_image
+from google_ocr import extract_text_from_pdf as google_extract_text_from_pdf
 
 class BatchDocumentProcessor:
     def __init__(self, input_folder, output_file):
@@ -80,13 +81,14 @@ class BatchDocumentProcessor:
             pdf_reader = PyPDF2.PdfReader(file)
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
+        if len(text.strip()) < 100:
+            text = google_extract_text_from_pdf(file_path)
         return text
     
     def extract_text_from_image(self, file_path):
-        """Estrae il testo da un'immagine usando OCR"""
+        """Estrae il testo da un'immagine usando Google Cloud Vision"""
         image = Image.open(file_path)
-        text = pytesseract.image_to_string(image, lang='ita')
-        return text
+        return google_extract_text_from_image(image)
     
     def is_visura_camerale(self, text):
         """Determina se il testo è di una visura camerale"""

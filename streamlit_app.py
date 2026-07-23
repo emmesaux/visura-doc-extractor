@@ -7,13 +7,14 @@ import streamlit as st
 import pandas as pd
 import PyPDF2
 from PIL import Image
-import pytesseract
 import re
 from datetime import datetime
 import io
 import base64
 from pathlib import Path
 from aml_fields import AML_TEMPLATE_COLUMNS, filter_aml_template_row
+from google_ocr import extract_text_from_image as google_extract_text_from_image
+from google_ocr import extract_text_from_pdf as google_extract_text_from_pdf
 
 # Configurazione pagina
 st.set_page_config(
@@ -81,26 +82,20 @@ class DocumentExtractor:
             pdf_reader = PyPDF2.PdfReader(file)
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
+            if len(text.strip()) < 100:
+                text = google_extract_text_from_pdf(file)
             return text
         except Exception as e:
             st.error(f"Errore nell'estrazione dal PDF: {str(e)}")
             return ""
     
     def extract_text_from_image(self, image):
-        """Estrae il testo da un'immagine usando OCR"""
+        """Estrae il testo da un'immagine usando Google Cloud Vision"""
         try:
-            # Preprocessing dell'immagine per migliorare l'OCR
-            # Converti in scala di grigi se necessario
-            if image.mode != 'L':
-                image = image.convert('L')
-
-            # Configurazione OCR per migliore estrazione
-            custom_config = r'--oem 3 --psm 6'
-            text = pytesseract.image_to_string(image, lang='ita', config=custom_config)
-            return text
+            return google_extract_text_from_image(image)
         except Exception as e:
-            st.error(f"Errore nell'OCR: {str(e)}")
-            st.warning("⚠️ Assicurati che Tesseract OCR sia installato sul server")
+            st.error(f"Errore nell'OCR Google: {str(e)}")
+            st.warning("⚠️ Configura GOOGLE_VISION_API_KEY nel file .env o nelle variabili d'ambiente")
             return ""
     
     def extract_pattern(self, text, pattern):
@@ -921,6 +916,9 @@ def main():
         - PDF
         - JPG/JPEG
         - PNG
+
+        **OCR:**
+        - Google Cloud Vision
         """)
         
         st.markdown("---")
@@ -1405,7 +1403,7 @@ def main():
         #### ⚠️ Note importanti
         
         - Questa è una versione web dell'applicazione
-        - Richiede Tesseract OCR installato sul server
+        - Richiede Google Cloud Vision configurato con un service account
         - I dati vengono elaborati localmente (privacy garantita)
         - Per uso professionale, considera il deploy su server dedicato
         
