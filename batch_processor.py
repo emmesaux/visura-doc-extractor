@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 from google_ocr import extract_text_from_image as google_extract_text_from_image
 from google_ocr import extract_text_from_pdf as google_extract_text_from_pdf
+from google_ocr import extract_visura_structured_data
 
 class BatchDocumentProcessor:
     def __init__(self, input_folder, output_file):
@@ -105,6 +106,17 @@ class BatchDocumentProcessor:
     def parse_visura_camerale(self, text):
         """Analizza il testo della visura camerale ed estrae i dati"""
         data = {}
+
+        try:
+            ai_data = extract_visura_structured_data(text)
+        except Exception as e:
+            ai_data = None
+            print(f"  ⚠ Estrazione AI non disponibile, uso il parser a pattern: {e}")
+
+        if ai_data:
+            data.update(ai_data)
+            if data.get('Denominazione') or data.get('Ragionesociale'):
+                return data
         
         # Denominazione/Ragione Sociale
         denominazione = self.extract_pattern(text, r"(?:Denominazione|Ragione sociale)[:\s]*([A-Z][^\n]+)")

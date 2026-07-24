@@ -15,6 +15,7 @@ from pathlib import Path
 from aml_fields import AML_TEMPLATE_COLUMNS, filter_aml_template_row
 from google_ocr import extract_text_from_image as google_extract_text_from_image
 from google_ocr import extract_text_from_pdf as google_extract_text_from_pdf
+from google_ocr import extract_visura_structured_data
 
 # Configurazione pagina
 st.set_page_config(
@@ -112,6 +113,17 @@ class DocumentExtractor:
     def parse_visura_camerale(self, text):
         """Analizza il testo della visura camerale ed estrae i dati"""
         data = {}
+
+        try:
+            ai_data = extract_visura_structured_data(text)
+        except Exception as e:
+            ai_data = None
+            st.warning(f"⚠️ Estrazione AI non disponibile, uso il parser a pattern: {e}")
+
+        if ai_data:
+            data.update(ai_data)
+            if data.get('Denominazione') or data.get('Ragionesociale'):
+                return data
 
         # DENOMINAZIONE / RAGIONE SOCIALE (multipli pattern incluse ditte individuali)
         denominazione_patterns = [
@@ -878,6 +890,11 @@ def map_data_to_template(visura_data, documento_data):
 
     return pd.DataFrame([filter_aml_template_row(row)])
 
+
+def build_visura_template_dataframe(visura_data):
+    """Crea il DataFrame AML per una sola visura senza documento associato."""
+    return map_data_to_template(visura_data, {})
+
 def create_download_link(df, filename, file_format):
     """Crea un link per il download del file"""
     if file_format == 'excel':
@@ -983,6 +1000,7 @@ def main():
                             data['Data_Elaborazione'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                             st.session_state.visura_data = data
+                            st.session_state.visura_template_data = build_visura_template_dataframe(data)
                             st.session_state.processed_docs += 1
 
                             if len(data) > 3:  # Se ha estratto più di 3 campi
@@ -1063,6 +1081,7 @@ def main():
         )
         
         if batch_files and st.button("🚀 Elabora Tutti i Documenti"):
+            st.caption("OCR: Google Vision. Compilazione campi: parser visura basato sul template AML.")
             visure_data = []
             documenti_data = []
             unmatched_data = []
@@ -1264,15 +1283,19 @@ def main():
         if 'visura_data' in st.session_state or 'documento_data' in st.session_state:
             st.markdown("#### Dati Estratti Individuali")
 
+            if 'visura_template_data' in st.session_state and st.session_state.visura_template_data is not None:
+                with st.expander("📄 Visura Camerale - formato template"):
+                    st.dataframe(st.session_state.visura_template_data)
+
             if 'visura_data' in st.session_state:
-                with st.expander("📄 Visura Camerale"):
+                with st.expander("🔍 Visura Camerale - dati grezzi"):
                     df_visura = pd.DataFrame([st.session_state.visura_data])
-                    st.dataframe(df_visura, use_container_width=True)
+                    st.dataframe(df_visura)
 
             if 'documento_data' in st.session_state:
                 with st.expander("🆔 Documento d'Identità"):
                     df_doc = pd.DataFrame([st.session_state.documento_data])
-                    st.dataframe(df_doc, use_container_width=True)
+                    st.dataframe(df_doc)
         
         # Visualizza dati batch nel formato template
         if 'batch_template_data' in st.session_state and st.session_state.batch_template_data is not None:
