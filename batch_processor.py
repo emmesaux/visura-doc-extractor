@@ -104,81 +104,15 @@ class BatchDocumentProcessor:
         return sum(1 for keyword in keywords if keyword in text_lower) >= 2
     
     def parse_visura_camerale(self, text):
-        """Analizza il testo della visura camerale ed estrae i dati"""
-        data = {}
-
-        try:
-            ai_data = extract_visura_structured_data(text)
-        except Exception as e:
-            ai_data = None
-            print(f"  ⚠ Estrazione AI non disponibile, uso il parser a pattern: {e}")
-
-        if ai_data:
-            data.update(ai_data)
-            if data.get('Denominazione') or data.get('Ragionesociale'):
-                return data
-        
-        # Denominazione/Ragione Sociale
-        denominazione = self.extract_pattern(text, r"(?:Denominazione|Ragione sociale)[:\s]*([A-Z][^\n]+)")
-        if denominazione:
-            data['Denominazione'] = denominazione.strip()
-        
-        # Partita IVA
-        piva = self.extract_pattern(text, r"(?:P\.IVA|Partita IVA)[:\s]*(\d{11})")
-        if piva:
-            data['Partita_IVA'] = piva
-        
-        # Codice Fiscale
-        cf = self.extract_pattern(text, r"(?:Codice Fiscale|C\.F\.)[:\s]*([A-Z0-9]{11,16})")
-        if cf:
-            data['Codice_Fiscale'] = cf
-        
-        # Numero REA
-        rea = self.extract_pattern(text, r"(?:REA|N\. REA)[:\s]*([A-Z]{2}[\s\-]?\d+)")
-        if rea:
-            data['Numero_REA'] = rea
-        
-        # Forma giuridica
-        forma = self.extract_pattern(text, r"(?:Forma giuridica|Natura giuridica)[:\s]*([^\n]+)")
-        if forma:
-            data['Forma_Giuridica'] = forma.strip()
-        
-        # Sede legale
-        sede = self.extract_pattern(text, r"(?:Sede legale|Indirizzo)[:\s]*([^\n]+?)(?:\d{5})")
-        if sede:
-            data['Sede_Legale'] = sede.strip()
-        
-        # CAP
-        cap = self.extract_pattern(text, r"(\d{5})")
-        if cap:
-            data['CAP'] = cap
-        
-        # Comune
-        comune = self.extract_pattern(text, r"\d{5}\s+([A-Z][A-Za-z\s]+?)(?:\(|Provincia)")
-        if comune:
-            data['Comune'] = comune.strip()
-        
-        # Provincia
-        provincia = self.extract_pattern(text, r"(?:Provincia|\()\s*([A-Z]{2})\s*(?:\)|$)")
-        if provincia:
-            data['Provincia'] = provincia
-        
-        # Data costituzione
-        data_cost = self.extract_pattern(text, r"(?:Data costituzione|Costituita il)[:\s]*(\d{2}/\d{2}/\d{4})")
-        if data_cost:
-            data['Data_Costituzione'] = data_cost
-        
-        # Capitale sociale
-        capitale = self.extract_pattern(text, r"(?:Capitale sociale|Capitale)[:\s]*(?:€|EUR)?\s*([\d.,]+)")
-        if capitale:
-            data['Capitale_Sociale'] = capitale
-        
-        # Stato attività
-        stato = self.extract_pattern(text, r"(?:Stato)[:\s]*(ATTIVA|CESSATA|SOSPESA)")
-        if stato:
-            data['Stato_Attivita'] = stato
-        
-        return data
+        """Analizza il testo della visura camerale usando l'estrazione strutturata AI (Gemini).
+        Nessun fallback a pattern/regex: se l'AI non è disponibile o non produce un
+        risultato utilizzabile, viene sollevata un'eccezione (gestita dal chiamante
+        process_all_documents, che segna il documento come errore) invece di
+        restituire dati parziali o inventati."""
+        ai_data = extract_visura_structured_data(text)
+        if not ai_data or not (ai_data.get('Denominazione') or ai_data.get('Ragionesociale')):
+            raise RuntimeError("L'AI non ha restituito dati validi per questa visura")
+        return ai_data
     
     def parse_documento_identita(self, text):
         """Analizza il testo del documento d'identità ed estrae i dati"""

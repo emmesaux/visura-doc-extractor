@@ -260,10 +260,36 @@ Schema richiesto:
 }}
 
 Regole:
-- Non inventare dati.
-- Se un campo non è presente, usa stringa vuota.
+- Non inventare dati. Se un campo non è presente esplicitamente nel testo, usa stringa vuota.
 - Restituisci al massimo 5 persone.
 - Se trovi società tra i soci, valorizza il ruolo coerentemente.
+
+Regole sulle persone (sezione "Titolari di cariche o qualifiche" / "Soci e titolari di
+cariche o qualifiche"):
+- Estrai TUTTE le persone elencate in quella sezione, non solo la prima: includi Titolare,
+  Titolare Firmatario, Amministratore (Unico/Delegato), Legale Rappresentante, Socio
+  (anche "Socio di società in nome collettivo", accomandatario/accomandante), Liquidatore,
+  Rappresentante dell'impresa, Direttore Tecnico. Ogni persona distinta va in un elemento
+  separato dell'array "persone".
+- I nominativi nelle visure sono scritti in ordine COGNOME NOME (tutto maiuscolo). Dividi
+  correttamente cognome e nome; non includere MAI nei campi nome/cognome parole che sono
+  etichette di ruolo (es. "Titolare", "Firmatario", "Rappresentante", "Liquidatore").
+- Molte visure ripetono lo stesso ruolo+nominativo due volte (una volta in un riquadro di
+  sintesi, una volta nel paragrafo di dettaglio) prima dei dati anagrafici: non incollare
+  il testo ripetuto dentro nome/cognome, usa solo il nominativo pulito.
+- Per ciascuna persona, cerca i dati anagrafici associati: rigo "Nato a COMUNE (PROV) il
+  GG/MM/AAAA" per data/comune/provincia di nascita, e rigo "residenza COMUNE (PROV)
+  INDIRIZZO CAP NNNNN" per l'indirizzo di residenza (in alcune visure compare come
+  "domicilio" invece di "residenza": trattali allo stesso modo).
+
+Regole su attività e ATECO:
+- "Attivita_Prevalente" va presa SOLO da un campo esplicitamente etichettato "Attività
+  prevalente" (o "attività prevalente esercitata dall'impresa"). NON usare mai il testo di
+  "Oggetto sociale" come Attività_Prevalente: sono campi diversi. Se non c'è un'attività
+  prevalente esplicita, lascia stringa vuota.
+- "Codice_ATECO" va preso SOLO da un campo etichettato "Codice ATECO" o "Classificazione
+  ATECO ... Codice: NN.NN.N". Non estrarre MAI un codice ATECO da importi in euro, capitale
+  sociale, conferimenti o altri numeri non etichettati come ATECO.
 
 Testo OCR:
 {text[:20000]}
