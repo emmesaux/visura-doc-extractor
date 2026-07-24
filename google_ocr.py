@@ -214,7 +214,10 @@ def _normalize_visura_payload(payload: dict) -> dict:
 def extract_visura_structured_data(text: str) -> dict:
     """Estrae una visura in JSON strutturato usando Gemini e ritorna un dizionario normalizzato."""
     api_key = _get_gemini_api_key()
-    endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    # "gemini-flash-latest" punta sempre al modello flash correntemente raccomandato
+    # da Google. Modelli fissati per nome (es. "gemini-2.0-flash") possono restare
+    # senza quota gratuita sui progetti nuovi una volta superati da versioni più recenti.
+    endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     prompt = f"""
 Sei un motore di estrazione dati da visure camerali italiane.
 Leggi il testo OCR e restituisci SOLO JSON valido, senza markdown e senza testo extra.
