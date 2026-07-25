@@ -285,6 +285,11 @@ cariche o qualifiche"):
   INDIRIZZO CAP NNNNN" per l'indirizzo di residenza (in alcune visure compare come
   "domicilio" invece di "residenza": trattali allo stesso modo).
 
+Regole sul Numero REA:
+- "Numero_REA" va riportato SEMPRE nel formato completo "PROVINCIA - NUMERO" esattamente
+  come appare nel testo (es. "TP - 184167", "CT - 332231"), includendo il codice provincia
+  e il trattino. Non restituire mai solo le cifre senza il prefisso provincia.
+
 Regole su attività e ATECO:
 - "Attivita_Prevalente" va presa SOLO da un campo esplicitamente etichettato "Attività
   prevalente" (o "attività prevalente esercitata dall'impresa"). NON usare mai il testo di
