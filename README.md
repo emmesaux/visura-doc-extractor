@@ -44,7 +44,7 @@ Non committare il file reale: usa il modello [secrets.toml.example](.streamlit/s
 
 Installa le dipendenze con:
 ```bash
-pip install pandas openpyxl PyPDF2 google-cloud-vision pdf2image pillow
+pip install pandas openpyxl PyPDF2 google-cloud-vision PyMuPDF pillow
 ```
 
 Librerie richieste:
@@ -53,7 +53,7 @@ Librerie richieste:
 - PyPDF2 (estrazione testo da PDF)
 - requests (chiamate HTTP verso Google Vision)
 - python-dotenv (caricamento del file .env)
-- pdf2image (conversione PDF in immagini)
+- PyMuPDF (rendering PDF in immagini per l'OCR)
 - pillow (gestione immagini)
 
 ## Struttura delle Cartelle

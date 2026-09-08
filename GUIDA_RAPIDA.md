@@ -30,9 +30,9 @@
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
 
-3. **Installa Python e Poppler**:
+3. **Installa Python**:
    ```bash
-   brew install python poppler
+   brew install python
    ```
 
 4. **Installa l'applicazione**:
@@ -46,10 +46,10 @@
 
 1. **Apri il Terminale**
 
-2. **Installa Python e Poppler**:
+2. **Installa Python**:
    ```bash
    sudo apt update
-   sudo apt install python3 python3-pip poppler-utils
+   sudo apt install python3 python3-pip
    ```
 
 3. **Installa l'applicazione**:

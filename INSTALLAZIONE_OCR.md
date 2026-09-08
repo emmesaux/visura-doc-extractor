@@ -59,4 +59,4 @@ Se la chiave e' presente, il controllo mostrera' lo stato OK per Google Vision O
 
 - L'OCR funziona su immagini JPG, PNG e su PDF scansionati convertiti in immagini.
 - Se il testo del PDF e' gia' selezionabile, l'app prova prima l'estrazione diretta senza OCR.
-- `pdf2image` resta utile per i PDF scansionati.
+- `PyMuPDF` renderizza le pagine dei PDF scansionati in immagini (nessuna dipendenza di sistema, es. Poppler, richiesta).

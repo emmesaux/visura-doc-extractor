@@ -36,7 +36,7 @@ def check_python_packages():
         'PyPDF2': 'Lettura PDF',
         'requests': 'Chiamate HTTP per Google Vision',
         'dotenv': 'Caricamento file .env',
-        'pdf2image': 'Conversione PDF in immagini',
+        'fitz': 'Rendering PDF in immagini (PyMuPDF)',
         'PIL': 'Gestione immagini (Pillow)',
     }
 
@@ -57,7 +57,7 @@ def check_python_packages():
 
     if not all_ok:
         print("\nPer installare i pacchetti mancanti:")
-        print("pip install openpyxl pandas PyPDF2 requests python-dotenv pdf2image pillow")
+        print("pip install openpyxl pandas PyPDF2 requests python-dotenv PyMuPDF pillow")
 
     return all_ok
 
@@ -89,22 +89,21 @@ def check_google_vision():
 
 
 def check_poppler():
-    """Verifica Poppler."""
+    """Verifica il rendering PDF (PyMuPDF)."""
     print("\n" + "=" * 70)
-    print("4. VERIFICA POPPLER (Opzionale)")
+    print("4. VERIFICA RENDERING PDF (PyMuPDF)")
     print("=" * 70)
 
     try:
-        from pdf2image import convert_from_path  # noqa: F401
+        import fitz  # noqa: F401  # PyMuPDF
 
-        print("[INFO] Poppler e' necessario solo per OCR su PDF scansionati")
-        print("    Lo script funzionera' anche senza per PDF con testo")
-        print("    Vedi: INSTALLAZIONE_OCR.md per installare Poppler")
+        print("[OK] PyMuPDF disponibile - nessuna dipendenza di sistema richiesta")
+        print("    Usato per l'OCR su PDF scansionati (rendering pagine in immagini)")
         return True
     except Exception as e:
         print(f"[INFO] {e}")
-        print("    Poppler potrebbe non essere installato")
-        print("    Non e' un problema se usi solo PDF con testo selezionabile")
+        print("    PyMuPDF non e' installato: pip install PyMuPDF")
+        print("    Serve solo per l'OCR su PDF scansionati senza testo selezionabile")
         return True
 
 

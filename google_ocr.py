@@ -110,17 +110,52 @@ def extract_text_from_image(image: Image.Image) -> str:
     return ""
 
 
-def extract_text_from_pdf(pdf_path: str | Path, dpi: int = 300) -> str:
-    """Estrae testo da un PDF convertendo le pagine in immagini e usando Google Vision."""
-    from pdf2image import convert_from_path
+def _read_pdf_bytes(pdf_source) -> bytes:
+    """Normalizza l'input (percorso, bytes o file-like) in bytes del PDF."""
+    if isinstance(pdf_source, (bytes, bytearray)):
+        return bytes(pdf_source)
 
-    images = convert_from_path(str(pdf_path), dpi=dpi)
+    if isinstance(pdf_source, (str, Path)):
+        return Path(pdf_source).read_bytes()
+
+    # File-like (es. UploadedFile di Streamlit): riavvolgi e leggi tutto.
+    if hasattr(pdf_source, "read"):
+        try:
+            pdf_source.seek(0)
+        except Exception:
+            pass
+        data = pdf_source.read()
+        try:
+            pdf_source.seek(0)
+        except Exception:
+            pass
+        return data
+
+    raise TypeError(f"Sorgente PDF non supportata: {type(pdf_source)!r}")
+
+
+def extract_text_from_pdf(pdf_source, dpi: int = 300) -> str:
+    """Estrae testo da un PDF renderizzando le pagine in immagini (PyMuPDF) e usando Google Vision.
+
+    Accetta un percorso file, i bytes del PDF oppure un oggetto file-like
+    (es. l'UploadedFile di Streamlit)."""
+    try:
+        import pymupdf as fitz  # PyMuPDF >= 1.24.3
+    except ImportError:
+        import fitz  # PyMuPDF (nome legacy)
+
+    pdf_bytes = _read_pdf_bytes(pdf_source)
+    zoom = dpi / 72.0
+    matrix = fitz.Matrix(zoom, zoom)
     extracted_pages: list[str] = []
 
-    for page_image in images:
-        page_text = extract_text_from_image(page_image)
-        if page_text:
-            extracted_pages.append(page_text)
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as document:
+        for page in document:
+            pixmap = page.get_pixmap(matrix=matrix)
+            page_image = Image.open(io.BytesIO(pixmap.tobytes("png")))
+            page_text = extract_text_from_image(page_image)
+            if page_text:
+                extracted_pages.append(page_text)
 
     return "\n".join(extracted_pages)
 
